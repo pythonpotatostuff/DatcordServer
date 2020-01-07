@@ -8,11 +8,12 @@
 
 namespace printer
 {
-	enum class color { WHITE, GREEN, RED, BLUE, YELLOW };
+	enum class color { WHITE = 0x07, GREEN = 0x0A, RED = 0x0C, BLUE = 0x0B, YELLOW = 0x0E };
+	struct PrintData { std::string text; color color; };
 	extern std::thread tPrinter;
 	extern std::atomic<bool> bStopPrinter;
 	extern HANDLE hOut;
-	extern std::queue<std::pair<std::string, color>> qPrint;
+	extern std::queue<PrintData> qPrint;
 	extern va_list arglist;
 	bool startPrinter();
 	int queuePrintf(color, const char* lpFormat, ...);

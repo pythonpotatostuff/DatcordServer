@@ -6,7 +6,6 @@
 
 constexpr auto port = "6969";
 constexpr int buff_size = 1048;
-constexpr int max_threads = 8;
 
 
 typedef enum _IO_OPERATION {

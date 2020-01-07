@@ -19,21 +19,21 @@
 #endif
 
 
-BOOL g_bEndServer = FALSE;
-BOOL g_bRestart = TRUE;
-BOOL g_bVerbose = TRUE;
+bool g_bEndServer = false;
+bool g_bRestart = true;
+bool g_bVerbose = true;
 DWORD g_dwThreadCount = 0; //worker thread count
 HANDLE g_hIOCP = INVALID_HANDLE_VALUE;
 SOCKET g_sdListen = INVALID_SOCKET;
-PPER_SOCKET_CONTEXT g_pCtxtList = NULL;		// linked list of context info structures
-std::array<std::thread, max_threads> g_Threads;
-std::array<HANDLE, max_threads> g_ThreadHandles;
-CRITICAL_SECTION g_CriticalSection;		//guard access to the global context list
+PPER_SOCKET_CONTEXT g_pCtxtList = NULL;	// linked list of context info structures
+std::vector<std::thread> g_Threads;
+std::vector<HANDLE> g_ThreadHandles;
+CRITICAL_SECTION g_CriticalSection;	//guard access to the global context list
 
 
 bool StartServer()
 {
-	printer::queuePrintf(printer::color::GREEN, "%s", "Starting server");
+	printer::queuePrintf(printer::color::GREEN, "[STRT] Starting server...\n");
 
 	SYSTEM_INFO systemInfo;
 	WSADATA wsaData;
@@ -43,12 +43,10 @@ bool StartServer()
 	DWORD dwFlags = 0;
 	int nRet = 0;
 
-	GetSystemInfo(&systemInfo);
-	g_dwThreadCount = systemInfo.dwNumberOfProcessors;
 	nRet = WSAStartup(MAKEWORD(2, 2), &wsaData);
 	if (nRet != 0)
 	{
-		printer::queuePrintf(printer::color::WHITE, "WSAStartup() failed: %d\n", nRet);
+		printer::queuePrintf(printer::color::RED, "[STRT] WSAStartup() failed: %d\n", nRet);
 		//CtrlHandler : needs to close and exit
 		return false;
 	}
@@ -59,33 +57,33 @@ bool StartServer()
 	}
 	catch (...)
 	{
-		printer::queuePrintf(printer::color::WHITE, "InitializeCriticalSection raised catchion.\n");
+		printer::queuePrintf(printer::color::RED, "[STRT] InitializeCriticalSection() failed: %d\n", GetLastError());
 		return false;
 	}
 
 	while (g_bRestart) {
-		g_bRestart = FALSE;
-		g_bEndServer = FALSE;
+		g_bRestart = false;
+		g_bEndServer = true;
 
 		try {
 			g_hIOCP = CreateIoCompletionPort(INVALID_HANDLE_VALUE, NULL, 0, 0);
 			if (g_hIOCP == NULL) {
-				printer::queuePrintf(printer::color::WHITE, "Failed to create I/O completion port: %d\n", GetLastError());
+				printer::queuePrintf(printer::color::WHITE, "[STRT] CreateIoCompletionPort() failed: %d\n", GetLastError());
 			}
-
+			GetSystemInfo(&systemInfo);
+			g_dwThreadCount = systemInfo.dwNumberOfProcessors;
 			for (DWORD dwThread = 0; dwThread < g_dwThreadCount; dwThread++) {
-				g_Threads.at(dwThread) = std::thread(WorkerThread, g_hIOCP);
-				g_ThreadHandles.at(dwThread) = g_Threads.at(dwThread).native_handle();
+				g_Threads.emplace_back(WorkerThread, g_hIOCP);
+				g_ThreadHandles.push_back(g_Threads.at(dwThread).native_handle());
 
 				if (!g_Threads.at(dwThread).joinable()) {
-					printer::queuePrintf(printer::color::WHITE, "Failed to create worker thread: %d\n", GetLastError());
+					printer::queuePrintf(printer::color::WHITE, "[STRT] Failed to create worker thread: %d\n", GetLastError());
 				}
 			}
 
-			if (!CreateListenSocket())
-				return false;
+			if (!CreateListenSocket()) return false;
 
-			while (TRUE) {
+			while (true) {
 
 				//
 				// Loop forever accepting connections from clients until console shuts down.
@@ -98,7 +96,7 @@ bool StartServer()
 					// handler will close the g_sdListen socket. The above WSAAccept call will 
 					// fail and we thus break out the loop,
 					//
-					printer::queuePrintf(printer::color::WHITE, "WSAAccept() failed: %d\n", WSAGetLastError());
+					printer::queuePrintf(printer::color::RED, "WSAAccept() failed: %d\n", WSAGetLastError());
 
 				}
 
@@ -117,8 +115,7 @@ bool StartServer()
 					// we go ahead and post another read (but after we have added it to the 
 					// list of sockets to close).
 					//
-					if (g_bEndServer)
-						break;
+					if (g_bEndServer) break;
 
 				//
 				// post initial receive on this socket
@@ -131,31 +128,33 @@ bool StartServer()
 					&(lpPerSocketContext->pIOContext->Overlapped),
 					NULL);
 				if (nRet == SOCKET_ERROR && (ERROR_IO_PENDING != WSAGetLastError())) {
-					printer::queuePrintf(printer::color::WHITE, "WSARecv() Failed: %d\n", WSAGetLastError());
-					CloseClient(lpPerSocketContext, FALSE);
+					printer::queuePrintf(printer::color::RED, "WSARecv() failed: %d\n", WSAGetLastError());
+					CloseClient(lpPerSocketContext, false);
 				}
 			} //while
 		}
+
 		catch (const std::exception & e)
 		{
-			printer::queuePrintf(printer::color::WHITE, "Caught exception: %s", e.what());
+			printer::queuePrintf(printer::color::RED, "Caught exception: %s", e.what());
 		}
 
-		g_bEndServer = TRUE;
+		g_bEndServer = true;
 
 		//
 		// Cause worker threads to exit
 		//
 		if (g_hIOCP) {
-			for (DWORD i = 0; i < g_dwThreadCount; i++)
+			for (DWORD i = 0; i < g_dwThreadCount; i++) {
 				PostQueuedCompletionStatus(g_hIOCP, 0, 0, NULL);
+			}
 		}
 
 		if (WaitForMultipleObjects(g_dwThreadCount, g_ThreadHandles.data(), TRUE, 1000) != WAIT_OBJECT_0)
-			printer::queuePrintf(printer::color::WHITE, "WaitForMultipleObjects() failed: %d\n", GetLastError());
+			printer::queuePrintf(printer::color::RED, "WaitForMultipleObjects() failed: %d\n", GetLastError());
 		else
-			for (DWORD i = 0; i < g_dwThreadCount && i < max_threads; i++) {
-				g_ThreadHandles[i] = INVALID_HANDLE_VALUE;
+			for (DWORD i = 0; i < g_dwThreadCount; i++) {
+				g_ThreadHandles.at(i) = INVALID_HANDLE_VALUE;
 			}
 
 		CtxtListFree();
@@ -176,10 +175,11 @@ bool StartServer()
 		}
 
 		if (g_bRestart) {
-			printer::queuePrintf(printer::color::WHITE, "\niocpserver is restarting...\n");
+			printer::queuePrintf(printer::color::YELLOW, "\niocpserver is restarting...\n");
 		}
-		else
-			printer::queuePrintf(printer::color::WHITE, "\niocpserver is exiting...\n");
+		else {
+			printer::queuePrintf(printer::color::YELLOW, "\niocpserver is exiting...\n");
+		}
 
 	} //while (g_bRestart)
 }
