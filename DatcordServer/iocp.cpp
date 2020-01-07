@@ -33,6 +33,8 @@ CRITICAL_SECTION g_CriticalSection;		//guard access to the global context list
 
 bool StartServer()
 {
+	printer::queuePrintf(printer::color::GREEN, "%s", "Starting server");
+
 	SYSTEM_INFO systemInfo;
 	WSADATA wsaData;
 	SOCKET sdAccept = INVALID_SOCKET;
