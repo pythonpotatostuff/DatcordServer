@@ -25,7 +25,7 @@ int printer::queuePrintf(color c, const char* lpFormat, ...)
 	char cBuffer[1024];
 	vsnprintf(cBuffer, 1024, lpFormat, arglist);
 	std::string strBuff(cBuffer);
-	printer::qPrint.push({ strBuff, c });
+	printer::qPrint.push({ c, strBuff });
 	return strBuff.length();
 }
 

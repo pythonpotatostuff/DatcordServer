@@ -9,7 +9,7 @@
 namespace printer
 {
 	enum class color { WHITE = 0x07, GREEN = 0x0A, RED = 0x0C, BLUE = 0x0B, YELLOW = 0x0E };
-	struct PrintData { std::string text; color color; };
+	struct PrintData { color color; std::string text; };
 	extern std::thread tPrinter;
 	extern std::atomic<bool> bStopPrinter;
 	extern HANDLE hOut;
