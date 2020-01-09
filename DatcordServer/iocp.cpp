@@ -5,6 +5,7 @@
 #include <strsafe.h>
 #include <thread>
 #include <array>
+#include <queue>
 #include "common.h"
 #include "iocp.h"
 
@@ -25,7 +26,8 @@ bool g_bVerbose = true;
 DWORD g_dwThreadCount = 0; //worker thread count
 HANDLE g_hIOCP = INVALID_HANDLE_VALUE;
 SOCKET g_sdListen = INVALID_SOCKET;
-PPER_SOCKET_CONTEXT g_pCtxtList = NULL;	// linked list of context info structures
+std::queue<pSocketContext> g_ContextList;
+pSocketContext g_pCtxtList = NULL;	// linked list of context info structures
 std::vector<std::thread> g_Threads;
 std::vector<HANDLE> g_ThreadHandles;
 CRITICAL_SECTION g_CriticalSection;	//guard access to the global context list
@@ -38,7 +40,7 @@ bool StartServer()
 	SYSTEM_INFO systemInfo;
 	WSADATA wsaData;
 	SOCKET sdAccept = INVALID_SOCKET;
-	PPER_SOCKET_CONTEXT lpPerSocketContext = NULL;
+	pSocketContext lpPerSocketContext = NULL;
 	DWORD dwRecvNumBytes = 0;
 	DWORD dwFlags = 0;
 	int nRet = 0;
@@ -105,7 +107,7 @@ bool StartServer()
 				// associated key data.  Also the global list of context structures
 				// (the key data) gets added to a global list.
 				//
-				lpPerSocketContext = UpdateCompletionPort(sdAccept, ClientIoRead, TRUE);
+				lpPerSocketContext = UpdateCompletionPort(sdAccept, ClientOperation::ClientRead, TRUE);
 				if (lpPerSocketContext == NULL)
 
 
@@ -188,7 +190,7 @@ bool StartServer()
 //
 //  Create a listening socket.
 //
-BOOL CreateListenSocket(void)
+bool CreateListenSocket(void)
 {
 	int nRet = 0;
 	int nZero = 0;
@@ -296,7 +298,7 @@ BOOL CreateListenSocket(void)
 //  initiated as a result of a CTRL-C the socket closure is not graceful).  Additionally, 
 //  any context data associated with that socket is free'd.
 //
-VOID CloseClient(PPER_SOCKET_CONTEXT lpPerSocketContext, BOOL bGraceful)
+void CloseClient(pSocketContext lpPerSocketContext, BOOL bGraceful)
 {
 	try
 	{
@@ -348,8 +350,8 @@ DWORD WINAPI WorkerThread(LPVOID WorkThreadContext) {
 	BOOL bSuccess = FALSE;
 	int nRet = 0;
 	LPWSAOVERLAPPED lpOverlapped = NULL;
-	PPER_SOCKET_CONTEXT lpPerSocketContext = NULL;
-	PPER_IO_CONTEXT lpIOContext = NULL;
+	pSocketContext lpPerSocketContext = NULL;
+	pIoContext lpIOContext = NULL;
 	WSABUF buffRecv;
 	WSABUF buffSend;
 	DWORD dwRecvNumBytes = 0;
@@ -400,15 +402,14 @@ DWORD WINAPI WorkerThread(LPVOID WorkThreadContext) {
 		// determine what type of IO packet has completed by checking the PER_IO_CONTEXT 
 		// associated with this socket.  This will determine what action to take.
 		//
-		lpIOContext = (PPER_IO_CONTEXT)lpOverlapped;
+		lpIOContext = (pIoContext)lpOverlapped;
 		switch (lpIOContext->IOOperation) {
-		case ClientIoRead:
-
+		case ClientOperation::ClientRead:
+			
 			//
 			// a read operation has completed, post a write operation to echo the
 			// data back to the client using the same data buffer.
 			//
-			lpIOContext->IOOperation = ClientIoWrite;
 			lpIOContext->nTotalBytes = dwIoSize;
 			lpIOContext->nSentBytes = 0;
 			lpIOContext->wsabuf.len = dwIoSize;
@@ -425,13 +426,12 @@ DWORD WINAPI WorkerThread(LPVOID WorkThreadContext) {
 			}
 			break;
 
-		case ClientIoWrite:
+		case ClientOperation::ClientWrite:
 
 			//
 			// a write operation has completed, determine if all the data intended to be
 			// sent actually was sent.
 			//
-			lpIOContext->IOOperation = ClientIoWrite;
 			lpIOContext->nSentBytes += dwIoSize;
 			dwFlags = 0;
 			if (lpIOContext->nSentBytes < lpIOContext->nTotalBytes) {
@@ -457,7 +457,7 @@ DWORD WINAPI WorkerThread(LPVOID WorkThreadContext) {
 				//
 				// previous write operation completed for this socket, post another recv
 				//
-				lpIOContext->IOOperation = ClientIoRead;
+				lpIOContext->IOOperation = ClientOperation::ClientRead;
 				dwRecvNumBytes = 0;
 				dwFlags = 0;
 				buffRecv.buf = lpIOContext->Buffer,
@@ -482,10 +482,10 @@ DWORD WINAPI WorkerThread(LPVOID WorkThreadContext) {
 
 
 
-PPER_SOCKET_CONTEXT UpdateCompletionPort(SOCKET sd, IO_OPERATION ClientIo, BOOL bAddToList)
+pSocketContext UpdateCompletionPort(SOCKET sd, ClientOperation ClientIo, BOOL bAddToList)
 {
 
-	PPER_SOCKET_CONTEXT lpPerSocketContext;
+	pSocketContext lpPerSocketContext;
 
 	lpPerSocketContext = CtxtAllocate(sd, ClientIo);
 	if (lpPerSocketContext == NULL)
@@ -516,9 +516,9 @@ PPER_SOCKET_CONTEXT UpdateCompletionPort(SOCKET sd, IO_OPERATION ClientIo, BOOL 
 //
 // Allocate a socket context for the new connection.  
 //
-PPER_SOCKET_CONTEXT CtxtAllocate(SOCKET sd, IO_OPERATION ClientIO) {
+pSocketContext CtxtAllocate(SOCKET sd, ClientOperation ClientIO) {
 
-	PPER_SOCKET_CONTEXT lpPerSocketContext;
+	pSocketContext lpPerSocketContext;
 
 	try
 	{
@@ -530,9 +530,9 @@ PPER_SOCKET_CONTEXT CtxtAllocate(SOCKET sd, IO_OPERATION ClientIO) {
 		return NULL;
 	}
 
-	lpPerSocketContext = (PPER_SOCKET_CONTEXT)malloc(sizeof(PER_SOCKET_CONTEXT));
+	lpPerSocketContext = (pSocketContext)malloc(sizeof(SocketContext));
 	if (lpPerSocketContext) {
-		lpPerSocketContext->pIOContext = (PPER_IO_CONTEXT)malloc(sizeof(PER_IO_CONTEXT));
+		lpPerSocketContext->pIOContext = (pIoContext)malloc(sizeof(IoContext));
 		if (lpPerSocketContext->pIOContext) {
 			lpPerSocketContext->Socket = sd;
 			lpPerSocketContext->pCtxtBack = NULL;
@@ -559,7 +559,7 @@ PPER_SOCKET_CONTEXT CtxtAllocate(SOCKET sd, IO_OPERATION ClientIO) {
 
 	}
 	else {
-		printer::queuePrintf(printer::color::RED, "HeapAlloc() PER_SOCKET_CONTEXT failed: %d\n", GetLastError());
+		printer::queuePrintf(printer::color::RED, "HeapAlloc() SocketContext failed: %d\n", GetLastError());
 	}
 
 	LeaveCriticalSection(&g_CriticalSection);
@@ -567,9 +567,9 @@ PPER_SOCKET_CONTEXT CtxtAllocate(SOCKET sd, IO_OPERATION ClientIO) {
 	return lpPerSocketContext;
 }
 
-VOID CtxtListAddTo(PPER_SOCKET_CONTEXT lpPerSocketContext) {
+void CtxtListAddTo(pSocketContext lpPerSocketContext) {
 
-	PPER_SOCKET_CONTEXT     pTemp;
+	pSocketContext     pTemp;
 
 	try
 	{
@@ -611,11 +611,11 @@ VOID CtxtListAddTo(PPER_SOCKET_CONTEXT lpPerSocketContext) {
 //
 //  Remove a client context structure from the global list of context structures.
 //
-VOID CtxtListDeleteFrom(PPER_SOCKET_CONTEXT lpPerSocketContext) {
-	PPER_SOCKET_CONTEXT pBack;
-	PPER_SOCKET_CONTEXT pForward;
-	PPER_IO_CONTEXT     pNextIO = NULL;
-	PPER_IO_CONTEXT     pTempIO = NULL;
+void CtxtListDeleteFrom(pSocketContext lpPerSocketContext) {
+	pSocketContext pBack;
+	pSocketContext pForward;
+	pIoContext     pNextIO = NULL;
+	pIoContext     pTempIO = NULL;
 
 	try
 	{
@@ -666,9 +666,9 @@ VOID CtxtListDeleteFrom(PPER_SOCKET_CONTEXT lpPerSocketContext) {
 		//
 		// Free all i/o context structures per socket
 		//
-		pTempIO = (PPER_IO_CONTEXT)(lpPerSocketContext->pIOContext);
+		pTempIO = lpPerSocketContext->pIOContext;
 		do {
-			pNextIO = (PPER_IO_CONTEXT)(pTempIO->pIOContextForward);
+			pNextIO = pTempIO->pIOContextForward;
 			if (pTempIO) {
 
 				//
@@ -699,8 +699,8 @@ VOID CtxtListDeleteFrom(PPER_SOCKET_CONTEXT lpPerSocketContext) {
 //
 //  Free all context structure in the global list of context structures.
 //
-VOID CtxtListFree() {
-	PPER_SOCKET_CONTEXT     pTemp1, pTemp2;
+void CtxtListFree() {
+	pSocketContext     pTemp1, pTemp2;
 
 	try
 	{

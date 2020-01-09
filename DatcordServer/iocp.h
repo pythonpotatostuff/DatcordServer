@@ -8,64 +8,51 @@ constexpr auto port = "6969";
 constexpr int buff_size = 1048;
 
 
-typedef enum _IO_OPERATION {
-	ClientIoAccept,
-	ClientIoRead,
-	ClientIoWrite
-} IO_OPERATION, *PIO_OPERATION;
+typedef enum class ClientOperation {
+	ClientAccept,
+	ClientRead,
+	ClientWrite
+} *pClientOperation;
 
+typedef struct IoContext {
+	WSAOVERLAPPED	Overlapped;
+	char			Buffer[buff_size];
+	WSABUF			wsabuf;
+	int				nTotalBytes;
+	int				nSentBytes;
+	ClientOperation	IOOperation;
+	SOCKET			SocketAccept;
+	IoContext*		pIOContextForward;
+} *pIoContext;
 
-typedef struct _PER_IO_CONTEXT {
-	WSAOVERLAPPED  Overlapped;
-	char           Buffer[buff_size];
-	WSABUF         wsabuf;
-	int            nTotalBytes;
-	int            nSentBytes;
-	IO_OPERATION   IOOperation;
-	SOCKET         SocketAccept;
-
-	struct _PER_IO_CONTEXT* pIOContextForward;
-} PER_IO_CONTEXT, *PPER_IO_CONTEXT;
-
-
-typedef struct _PER_SOCKET_CONTEXT {
-	SOCKET                      Socket;
-	//linked list for all outstanding i/o on the socket
-	PPER_IO_CONTEXT             pIOContext;
-	struct _PER_SOCKET_CONTEXT* pCtxtBack;
-	struct _PER_SOCKET_CONTEXT* pCtxtForward;
-} PER_SOCKET_CONTEXT, *PPER_SOCKET_CONTEXT;
+typedef struct SocketContext {
+	SOCKET         Socket;
+	IoContext*     pIOContext;
+	SocketContext* pCtxtBack;
+	SocketContext* pCtxtForward;
+} *pSocketContext;
 
 
 bool StartServer();
 
-BOOL WINAPI CtrlHandler(DWORD dwEvent);
+bool WINAPI CtrlHandler(DWORD dwEvent);
 
-
-BOOL CreateListenSocket();
-
+bool CreateListenSocket();
 
 DWORD WINAPI WorkerThread(LPVOID WorkContext);
 
-
-PPER_SOCKET_CONTEXT UpdateCompletionPort(SOCKET s, IO_OPERATION ClientIo, BOOL bAddToList);
-
+pSocketContext UpdateCompletionPort(SOCKET s, ClientOperation ClientIo, BOOL bAddToList);
 
 // bAddToList is FALSE for listening socket, and TRUE for connection sockets.
 // As we maintain the context for listening socket in a global structure, we
 // don't need to add it to the list.
+void CloseClient(pSocketContext lpPerSocketContext, BOOL bGraceful);
 
-VOID CloseClient(PPER_SOCKET_CONTEXT lpPerSocketContext, BOOL bGraceful);
+pSocketContext CtxtAllocate(SOCKET s, ClientOperation ClientIO);
 
+void CtxtListFree();
 
-PPER_SOCKET_CONTEXT CtxtAllocate(SOCKET s, IO_OPERATION ClientIO);
+void CtxtListAddTo(pSocketContext lpPerSocketContext);
 
-
-VOID CtxtListFree();
-
-
-VOID CtxtListAddTo(PPER_SOCKET_CONTEXT lpPerSocketContext);
-
-
-VOID CtxtListDeleteFrom(PPER_SOCKET_CONTEXT lpPerSocketContext);
+void CtxtListDeleteFrom(pSocketContext lpPerSocketContext);
 
