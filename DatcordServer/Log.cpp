@@ -2,7 +2,19 @@
 #include "printer.h"
 
 
-Log::Log(char* lpFname) : hFile{ INVALID_HANDLE_VALUE }, hMap{ INVALID_HANDLE_VALUE }, data{}, qwSize{}
+void Log::GetTimestamp()
+{
+	SYSTEMTIME lt = { 0 };
+	GetLocalTime(&lt);
+	sprintf_s<timeSize>(time, "[%04d-%02d-%02d|%02d:%02d:%02d]", lt.wYear, lt.wMonth, lt.wDay, lt.wHour, lt.wMinute, lt.wSecond);
+}
+
+
+Log::Log(const char* lpFname) : hFile{ INVALID_HANDLE_VALUE },
+	hMap{ INVALID_HANDLE_VALUE },
+	data{}, qwSize{}, qwViewSize{},
+	dwGran{}, qwCurrentIndex{},
+	size{}, time{}, maxIndex{}
 {
 	if (!InitializeCriticalSectionAndSpinCount(&cSection, 1024)) { //Initilize the critical section with a spin count of 1024
 		printer::queuePrintf(printer::color::RED, "[LOG] InitializeCriticalSectionAndSpinCount() failed: %d", GetLastError());
@@ -32,7 +44,7 @@ Log::Log(char* lpFname) : hFile{ INVALID_HANDLE_VALUE }, hMap{ INVALID_HANDLE_VA
 }
 
 
-uint64_t Log::log(char* lpStr, size_t size)
+uint64_t Log::log(const char* lpStr)
 {
 	try { //Enter the critical section
 		EnterCriticalSection(&cSection);
@@ -42,10 +54,14 @@ uint64_t Log::log(char* lpStr, size_t size)
 		return -1;
 	}
 
-	for (size_t i = 0; i <= size; i++) { //Add lpStr to the end of the file
-		data[qwCurrentIndex] = lpStr[i];
+	ZeroMemory(time, timeSize);
+	GetTimestamp();
+	strcat_s(time, lpStr); //Append lpStr to buff
+	size = strlen(time);
+	for (size_t i = 0; i <= size; i++) { //Append buff to the end of the file
+		data[qwCurrentIndex] = time[i];
 		qwCurrentIndex++;
-		if (qwCurrentIndex % 100 == 0) { //Every 100th character appended, flush the file, saving the changes to disk
+		if (qwCurrentIndex % 600 == 0) { //Every 600th character appended, flush the file, saving the changes to disk
 			if (!FlushViewOfFile(data, 0)) {
 				printer::queuePrintf(printer::color::RED, "[LOG] FlushViewOfFile() failed: %d", GetLastError());
 				try {
@@ -119,7 +135,7 @@ uint64_t Log::fileExtend()
 
 	qwViewSize.low = GetFileSize(hFile, &qwViewSize.high);
 	qwViewSize.qword = qwViewSize.qword / dwGran * dwGran; //Determine where the last page of the file starts
-	qwCurrentIndex = static_cast<short>(qwSize.qword - qwViewSize.qword); //Determine where to start logging from
+	qwCurrentIndex = qwSize.qword - qwViewSize.qword; //Determine where to start logging from
 	maxIndex = extendSize + qwCurrentIndex - 1; //Determine where the end of the file is, leaving 1 character at the end for the EOF
 
 	data = (char*)MapViewOfFile(hMap, FILE_MAP_ALL_ACCESS, qwSize.high, qwSize.low, 0);

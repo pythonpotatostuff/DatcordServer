@@ -1,6 +1,6 @@
 #pragma once
 #include <Windows.h>
-#include <vector>
+#include <string>
 
 
 class Log
@@ -14,12 +14,19 @@ private:
 	QWORD qwSize;
 	QWORD qwViewSize;
 	DWORD dwGran;
-	short qwCurrentIndex;
+	uint64_t qwCurrentIndex;
+	uint64_t size;
 	static constexpr DWORD extendSize = 8192;
-	short maxIndex;
+	static constexpr DWORD timeSize = 1024;
+	char time[timeSize];
+	uint64_t maxIndex;
+
+	void GetTimestamp();
+	
+
 public:
-	Log(char* lpFname);
-	uint64_t log(char* lpStr, size_t size);
+	Log(const char* lpFname);
+	uint64_t log(const char* lpStr);
 	uint64_t fileExtend();
 	~Log();
 };

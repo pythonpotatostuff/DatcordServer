@@ -677,7 +677,7 @@ VOID CtxtListDeleteFrom(PPER_SOCKET_CONTEXT lpPerSocketContext) {
 				//by PQCS in the shutdown process.
 				//
 				if (g_bEndServer)
-					while (!HasOverlappedIoCompleted((LPOVERLAPPED)pTempIO)) Sleep(0);
+					while (!HasOverlappedIoCompleted((LPOVERLAPPED)pTempIO)) Sleep(0); // With C++11, you have a better platform independent way to do that: std::this_thread::yield()
 				free(pTempIO);
 				pTempIO = NULL;
 			}

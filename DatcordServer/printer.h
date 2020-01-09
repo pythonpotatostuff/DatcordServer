@@ -15,9 +15,11 @@ namespace printer
 	extern HANDLE hOut;
 	extern std::queue<PrintData> qPrint;
 	extern va_list arglist;
+	constexpr DWORD timeSize = 1024;
 	bool startPrinter();
 	int queuePrintf(color, const char* lpFormat, ...);
 	bool stopPrinter();
 	void printLoop();
+	std::string GetTimestamp();
 }
 

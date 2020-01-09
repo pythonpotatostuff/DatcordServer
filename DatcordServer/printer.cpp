@@ -9,6 +9,16 @@ std::queue<printer::PrintData> printer::qPrint;
 va_list printer::arglist;
 
 
+std::string printer::GetTimestamp()
+{
+	SYSTEMTIME lt = { 0 };
+	GetLocalTime(&lt);
+	char time[timeSize];
+	sprintf_s<timeSize>(time, "[%04d-%02d-%02d|%02d:%02d:%02d]", lt.wYear, lt.wMonth, lt.wDay, lt.wHour, lt.wMinute, lt.wSecond);
+	return std::string(time);
+}
+
+
 bool printer::startPrinter()
 {
 	bStopPrinter = false;
@@ -25,6 +35,7 @@ int printer::queuePrintf(color c, const char* lpFormat, ...)
 	char cBuffer[1024];
 	vsnprintf(cBuffer, 1024, lpFormat, arglist);
 	std::string strBuff(cBuffer);
+	strBuff.insert(0, GetTimestamp() + ": ");
 	printer::qPrint.push({ c, strBuff });
 	return strBuff.length();
 }
