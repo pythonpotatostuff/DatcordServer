@@ -5,8 +5,18 @@
 std::thread printer::tPrinter;
 std::atomic<bool> printer::bStopPrinter;
 HANDLE printer::hOut;
-std::queue<std::pair<std::string, printer::color>> printer::qPrint;
+std::queue<printer::PrintData> printer::qPrint;
 va_list printer::arglist;
+
+
+std::string printer::GetTimestamp()
+{
+	SYSTEMTIME lt = { 0 };
+	GetLocalTime(&lt);
+	char time[timeSize];
+	sprintf_s<timeSize>(time, "[%04d-%02d-%02d|%02d:%02d:%02d]", lt.wYear, lt.wMonth, lt.wDay, lt.wHour, lt.wMinute, lt.wSecond);
+	return std::string(time);
+}
 
 
 bool printer::startPrinter()
@@ -25,7 +35,8 @@ int printer::queuePrintf(color c, const char* lpFormat, ...)
 	char cBuffer[1024];
 	vsnprintf(cBuffer, 1024, lpFormat, arglist);
 	std::string strBuff(cBuffer);
-	printer::qPrint.push(make_pair(strBuff, c));
+	strBuff.insert(0, GetTimestamp() + ": ");
+	printer::qPrint.push({ c, strBuff });
 	return strBuff.length();
 }
 
@@ -43,15 +54,8 @@ void printer::printLoop()
 {
 	while (!bStopPrinter) {
 		if (!qPrint.empty()) {
-			switch (qPrint.front().second)
-			{
-			case color::WHITE: SetConsoleTextAttribute(hOut, 0x07); break;
-			case color::GREEN: SetConsoleTextAttribute(hOut, 0x0A); break;
-			case color::RED: SetConsoleTextAttribute(hOut, 0x0C); break;
-			case color::BLUE: SetConsoleTextAttribute(hOut, 0x0B); break;
-			case color::YELLOW: SetConsoleTextAttribute(hOut, 0x0E); break;
-			}
-			printf("%s", qPrint.front().first.c_str());
+			SetConsoleTextAttribute(hOut, static_cast<WORD>(qPrint.front().color));
+			printf("%s", qPrint.front().text.c_str());
 			qPrint.pop();
 		}
 		std::this_thread::sleep_for(std::chrono::milliseconds(5));
