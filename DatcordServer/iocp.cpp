@@ -715,7 +715,8 @@ void CtxtListFree() {
 	}
 
 	pTemp1 = g_pCtxtList;
-	while (pTemp1) {
+	while (pTemp1)
+	{
 		pTemp2 = pTemp1->pCtxtBack;
 		CloseClient(pTemp1, FALSE);
 		pTemp1 = pTemp2;
