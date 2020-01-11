@@ -29,7 +29,7 @@ bool printer::startPrinter()
 }
 
 
-int printer::queuePrintf(color c, const char* lpFormat, ...)
+size_t printer::queuePrintf(color c, const char* lpFormat, ...)
 {
 	va_start(arglist, lpFormat);
 	char cBuffer[1024];

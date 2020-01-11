@@ -734,15 +734,14 @@ void CtxtListFree() {
 //=============================================================================================================================================
 
 
-IocpServer::IocpServer()
+IocpServer::IocpServer() : m_serverReady(false)
 {
 	int nRet;
 	DWORD dwThreadCount;
 
 	printer::queuePrintf(printer::color::BLUE, "[SARTUP] Starting server...\n");
 
-	try { InitializeCriticalSectionAndSpinCount(&m_criticalSection, 1024); } //Initilize the critical section
-	catch (...) {
+	if(!InitializeCriticalSectionAndSpinCount(&m_criticalSection, 1024)) {//Initilize the critical section
 		printer::queuePrintf(printer::color::RED, "[SARTUP] InitializeCriticalSectionAndSpinCount() failed: %d\n", GetLastError());
 		Shutdown();
 		return;
@@ -842,7 +841,7 @@ bool IocpServer::Run()
 		// NOT SURE ABOUT THIS - pSocketContext lpPerSocketContext;
 
 		sockaddr_in6 clientInfo;
-		int addrLen = sizeof sockaddr_in6;
+		int addrLen = sizeof(clientInfo);
 		SOCKET m_sdTcpClient = WSAAccept(m_sdTcpAccept, (sockaddr*)&clientInfo, &addrLen, NULL, 0);
 		if (m_sdTcpClient == SOCKET_ERROR) {
 			printer::queuePrintf(printer::color::RED, "WSAAccept() failed: %d\n", WSAGetLastError());
