@@ -841,7 +841,8 @@ bool IocpServer::Run()
 		// NOT SURE ABOUT THIS - pSocketContext lpPerSocketContext;
 
 		sockaddr_in6 clientInfo;
-		SOCKET m_sdTcpClient = WSAAccept(m_sdTcpAccept, &clientInfo, NULL, NULL, 0);
+		int addrLen = sizeof sockaddr_in6;
+		SOCKET m_sdTcpClient = WSAAccept(m_sdTcpAccept, (sockaddr*)&clientInfo, &addrLen, NULL, 0);
 		if (m_sdTcpClient == SOCKET_ERROR) {
 			printer::queuePrintf(printer::color::RED, "WSAAccept() failed: %d\n", WSAGetLastError());
 		}
@@ -851,7 +852,7 @@ bool IocpServer::Run()
 		// associated key data.  Also the global list of context structures
 		// (the key data) gets added to a global list.
 		//
-		lpPerSocketContext = UpdateCompletionPort(m_sdTcpAccept, ClientOperation::ClientRead, TRUE);
+		pSocketContext lpPerSocketContext = UpdateCompletionPort(m_sdTcpAccept, ClientOperation::ClientRead, TRUE);
 		if (lpPerSocketContext == NULL)
 
 
