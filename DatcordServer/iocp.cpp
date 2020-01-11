@@ -8,7 +8,7 @@
 #include <queue>
 #include "common.h"
 #include "iocp.h"
-
+#define IPV6STRICT
 #pragma warning (disable:4127)
 
 #ifdef _IA64_
@@ -405,7 +405,7 @@ DWORD WINAPI WorkerThread(LPVOID WorkThreadContext) {
 		lpIOContext = (pIoContext)lpOverlapped;
 		switch (lpIOContext->IOOperation) {
 		case ClientOperation::ClientRead:
-			
+
 			//
 			// a read operation has completed, post a write operation to echo the
 			// data back to the client using the same data buffer.
@@ -481,7 +481,6 @@ DWORD WINAPI WorkerThread(LPVOID WorkThreadContext) {
 }
 
 
-
 pSocketContext UpdateCompletionPort(SOCKET sd, ClientOperation ClientIo, BOOL bAddToList)
 {
 
@@ -490,6 +489,9 @@ pSocketContext UpdateCompletionPort(SOCKET sd, ClientOperation ClientIo, BOOL bA
 	lpPerSocketContext = CtxtAllocate(sd, ClientIo);
 	if (lpPerSocketContext == NULL)
 		return NULL;
+
+	if (g_hIOCP == NULL)
+		printer::queuePrintf(printer::color::RED, "CreateIoCompletionPort() g_hIOCP was null: %d\n", GetLastError());
 
 	g_hIOCP = CreateIoCompletionPort((HANDLE)sd, g_hIOCP, (DWORD_PTR)lpPerSocketContext, 0);
 	if (g_hIOCP == NULL) {
@@ -721,5 +723,198 @@ void CtxtListFree() {
 
 	LeaveCriticalSection(&g_CriticalSection);
 	return;
+}
+
+//=============================================================================================================================================
+//=============================================================================================================================================
+//=============================================================================================================================================
+//=============================================================================================================================================
+//=============================================================================================================================================
+//=============================================================================================================================================
+
+
+IocpServer::IocpServer()
+{
+	int nRet;
+	DWORD dwThreadCount;
+
+	printer::queuePrintf(printer::color::BLUE, "[SARTUP] Starting server...\n");
+
+	try { InitializeCriticalSectionAndSpinCount(&m_criticalSection, 1024); } //Initilize the critical section
+	catch (...) {
+		printer::queuePrintf(printer::color::RED, "[SARTUP] InitializeCriticalSectionAndSpinCount() failed: %d\n", GetLastError());
+		Shutdown();
+		return;
+	}
+
+	nRet = WSAStartup(MAKEWORD(2, 2), NULL); //Startup WSA V2.2
+	if (nRet != 0) {
+		printer::queuePrintf(printer::color::RED, "[SARTUP] WSAStartup() failed: %d\n", nRet);
+		Shutdown();
+		return;
+	}
+
+	SYSTEM_INFO systemInfo;
+	GetSystemInfo(&systemInfo);
+	dwThreadCount = systemInfo.dwNumberOfProcessors; //Make number of threads equal to number of logical cores
+
+	m_hIOCP = CreateIoCompletionPort(INVALID_HANDLE_VALUE, NULL, 0, dwThreadCount); //Create new io completion port
+	if (g_hIOCP == NULL) {
+		printer::queuePrintf(printer::color::RED, "[SARTUP] CreateIoCompletionPort() failed: %d\n", GetLastError());
+		Shutdown();
+		return;
+	}
+
+	for (DWORD i = 0; i < dwThreadCount; i++)
+	{ //Startup worker threads and pass the IOCP handle to them
+		std::thread t(Worker, this);
+		m_threadHandles.push_back(t.native_handle());
+		if (!t.joinable()) {
+			printer::queuePrintf(printer::color::RED, "[STARTUP] Failed to create worker thread: %d\n", GetLastError());
+			Shutdown();
+			return;
+		}
+		t.detach();
+	}
+
+	m_sdTcpAccept = WSASocketW(AF_INET6, SOCK_STREAM, IPPROTO_TCP, NULL, 0, WSA_FLAG_OVERLAPPED); //MIGHT NEED A SECOND LISTEN SOCKET TO ACCEPT UDP CONNECTIONS TOO
+	if (m_sdTcpAccept == INVALID_SOCKET) {
+		printer::queuePrintf(printer::color::RED, "[STARTUP] WSASocketW() failed: %d\n", WSAGetLastError());
+		Shutdown();
+		return;
+	}
+
+	SOCKADDR_STORAGE sockInfo = { AF_INET };
+	nRet = bind(m_sdTcpAccept, (sockaddr*)&sockInfo, sizeof(sockInfo)); //bind new socket
+	if (nRet == SOCKET_ERROR) {
+		printer::queuePrintf(printer::color::RED, "[STARTUP] bind() failed: %d\n", WSAGetLastError());
+		Shutdown();
+		return;
+	}
+
+	nRet = listen(m_sdTcpAccept, SOMAXCONN); //set new socket to the listening state
+	if (nRet == SOCKET_ERROR) {
+		printer::queuePrintf(printer::color::RED, "[STARTUP] listen() failed: %d\n", WSAGetLastError());
+		Shutdown();
+		return;
+	}
+}
+
+
+bool IocpServer::EnterCritical(char* const lpStr)
+{
+	try { EnterCriticalSection(&m_criticalSection); }
+	catch (const std::exception & e) {
+		char err[] = " EnterCriticalSection() failed: ";
+		strcat_s(lpStr, strlen(lpStr), err);
+		printer::queuePrintf(printer::color::WHITE, err, e.what());
+		return false;
+	}
+	return true;
+}
+
+
+bool IocpServer::LeaveCritical(char* const lpStr)
+{
+	try { LeaveCriticalSection(&m_criticalSection); }
+	catch (const std::exception & e) {
+		char err[] = " LeaveCriticalSection() failed: ";
+		strcat_s(lpStr, strlen(lpStr), err);
+		printer::queuePrintf(printer::color::WHITE, err, e.what());
+		return false;
+	}
+	return true;
+}
+
+
+bool IocpServer::Run()
+{
+	DWORD dwRecvNumBytes = 0;
+	DWORD dwFlags = 0;
+	int nRet = 0;
+
+	if (!m_serverReady) return false;
+
+	// accept all incoming connetions and post initial read 
+	while (true)
+	{
+		// NOT SURE ABOUT THIS - pSocketContext lpPerSocketContext;
+
+		sockaddr_in6 clientInfo;
+		SOCKET m_sdTcpClient = WSAAccept(m_sdTcpAccept, &clientInfo, NULL, NULL, 0);
+		if (m_sdTcpClient == SOCKET_ERROR) {
+			printer::queuePrintf(printer::color::RED, "WSAAccept() failed: %d\n", WSAGetLastError());
+		}
+
+		//
+		// we add the just returned socket descriptor to the IOCP along with its
+		// associated key data.  Also the global list of context structures
+		// (the key data) gets added to a global list.
+		//
+		lpPerSocketContext = UpdateCompletionPort(m_sdTcpAccept, ClientOperation::ClientRead, TRUE);
+		if (lpPerSocketContext == NULL)
+
+
+			//
+			// if a CTRL-C was pressed "after" WSAAccept returns, the CTRL-C handler
+			// will have set this flag and we can break out of the loop here before
+			// we go ahead and post another read (but after we have added it to the 
+			// list of sockets to close).
+			//
+			if (g_bEndServer) break;
+
+		//
+		// post initial receive on this socket
+		//
+		nRet = WSARecv(m_sdTcpAccept,
+					   &(lpPerSocketContext->pIOContext->wsabuf),
+					   1,
+					   &dwRecvNumBytes,
+					   &dwFlags,
+					   &(lpPerSocketContext->pIOContext->Overlapped),
+					   NULL);
+		if (nRet == SOCKET_ERROR && (ERROR_IO_PENDING != WSAGetLastError())) {
+			printer::queuePrintf(printer::color::RED, "WSARecv() failed: %d\n", WSAGetLastError());
+			CloseClient(lpPerSocketContext, false);
+		}
+	} //while
+	return true;
+}
+
+
+void IocpServer::Worker(IocpServer* self)
+{
+
+}
+
+
+void IocpServer::Shutdown()
+{
+	m_serverReady = false;
+	if (shutdown(m_sdTcpAccept, SD_BOTH) == SOCKET_ERROR) { //Shutdown tcp listening socket
+		printer::queuePrintf(printer::color::RED, "[SHUTDOWN] shutdown() failed: %d\n", WSAGetLastError());
+	}
+	if (closesocket(m_sdTcpAccept) == SOCKET_ERROR) { //Close tcp listening socket
+		printer::queuePrintf(printer::color::RED, "[SHUTDOWN] closesocket() failed: %d\n", WSAGetLastError());
+	}
+
+	if (WaitForMultipleObjects(m_threadHandles.size(), m_threadHandles.data(), true, 1000) != WAIT_OBJECT_0) { //Wait for all worker threads to end
+		printer::queuePrintf(printer::color::RED, "[SHUTDOWN] WaitForMultipleObjects() timed out: %d\n", WSAGetLastError());
+	}
+
+	if (m_hIOCP) { //Close the IOCP handle
+		if (CloseHandle(m_hIOCP) == 0) {
+			printer::queuePrintf(printer::color::RED, "[SHUTDOWN] CloseHandle() failed: %d\n", GetLastError());
+		}
+	}
+
+	if (WSACleanup() == SOCKET_ERROR) { //Cleanup WSA
+		printer::queuePrintf(printer::color::RED, "[SHUTDOWN] WSACleanup() failed: %d\n", WSAGetLastError());
+	}
+
+	try { DeleteCriticalSection(&m_criticalSection); } //Delete critical section
+	catch (...) {
+		printer::queuePrintf(printer::color::RED, "[SHUTDOWN] DeleteCriticalSection() failed: %d\n", GetLastError());
+	}
 }
 
