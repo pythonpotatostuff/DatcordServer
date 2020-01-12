@@ -7,31 +7,32 @@
 constexpr auto port = "6969";
 constexpr int buff_size = 1048;
 
-
-typedef enum class ClientOperation {
+typedef enum class ClientOperation
+{
 	ClientAccept,
 	ClientRead,
 	ClientWrite
-} *pClientOperation;
+} * pClientOperation;
 
-typedef struct IoContext {
-	WSAOVERLAPPED	Overlapped;
-	char			Buffer[buff_size];
-	WSABUF			wsabuf;
-	int				nTotalBytes;
-	int				nSentBytes;
-	ClientOperation	IOOperation;
-	SOCKET			SocketAccept;
-	IoContext* pIOContextForward;
-} *pIoContext;
+typedef struct IoContext
+{
+	WSAOVERLAPPED Overlapped;
+	char Buffer[buff_size];
+	WSABUF wsabuf;
+	int nTotalBytes;
+	int nSentBytes;
+	ClientOperation IOOperation;
+	SOCKET SocketAccept;
+	IoContext *pIOContextForward;
+} * pIoContext;
 
-typedef struct SocketContext {
-	SOCKET         Socket;
-	IoContext* pIOContext;
-	SocketContext* pCtxtBack;
-	SocketContext* pCtxtForward;
-} *pSocketContext;
-
+typedef struct SocketContext
+{
+	SOCKET Socket;
+	IoContext *pIOContext;
+	SocketContext *pCtxtBack;
+	SocketContext *pCtxtForward;
+} * pSocketContext;
 
 bool StartServer();
 
@@ -58,36 +59,48 @@ void CtxtListDeleteFrom(pSocketContext lpPerSocketContext);
 
 // =================================================================================
 
-template<class T>
-class LinkedList : public std::list<T>
-{
-	CRITICAL_SECTION CriticalSection;
-
-
-};
-
 class IocpServer
 {
+public:
+	class ClientContext
+	{
+		//SocketContext clientSocketCtx;
+	public:
+		bool m_bGraceful;
+		SOCKET Socket;
+		IoContext *pIOContext;
+		/* SocketContext *pCtxtBack; // probably not using these
+		SocketContext *pCtxtForward;  */
+	public:
+		ClientContext(SOCKET sd, ClientOperation ClientIO, bool graceful);
+		~ClientContext();
+	};
+
 private:
 	HANDLE m_hIOCP;
 	SOCKET m_sdTcpAccept;
-	LinkedList<pSocketContext> m_contextList; //this might be TEMP
-	pSocketContext m_pCtxtList; //this might be TEMP
+	//LinkedList<pSocketContext> m_contextList; //this might be TEMP
+	//pSocketContext m_pCtxtList; //this might be TEMP
 	std::vector<HANDLE> m_threadHandles;
 	CRITICAL_SECTION m_criticalSection; //Make segments of code thread safe
 	bool m_serverReady;
+
 public:
 	IocpServer();
 	void Shutdown();
 
-	bool EnterCritical(char* const lpStr);
-	bool LeaveCritical(char* const lpStr);
+	bool EnterCritical(char *const lpStr = "");
+	bool LeaveCritical(char *const lpStr = "");
 
-	void ContextAdd(pSocketContext lpPerSocketContext);
+	void ContextAdd(pSocketContext lpPerSocketContext); // most likely dont need either of these
 	void ContextDelete();
+
+	ClientContext* NewContext(SOCKET sd, ClientOperation ClientIO); // wrapper for thread safety
+	bool FreeContext(ClientContext* context);
+
+	ClientContext* UpdateCompletionPort(SOCKET sd, ClientOperation ClientIo /*, BOOL bAddToList*/);
 
 	bool Run();
 
-	static void Worker(IocpServer* self);
+	static void Worker(IocpServer *self);
 };
-
