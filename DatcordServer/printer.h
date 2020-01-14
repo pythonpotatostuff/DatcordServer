@@ -17,7 +17,7 @@ namespace printer
 	extern va_list arglist;
 	constexpr DWORD timeSize = 1024;
 	bool startPrinter();
-	int queuePrintf(color, const char* lpFormat, ...);
+	size_t queuePrintf(color, const char* lpFormat, ...);
 	bool stopPrinter();
 	void printLoop();
 	std::string GetTimestamp();
