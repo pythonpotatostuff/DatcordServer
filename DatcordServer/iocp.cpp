@@ -471,7 +471,7 @@ DWORD WINAPI WorkerThread(LPVOID WorkThreadContext)
 				// post another send to complete the operation
 				//
 				buffSend.buf = lpIOContext->Buffer + lpIOContext->nSentBytes;
-				buffSend.len = lpIOContext->nTotalBytes - lpIOContext->nSentBytes;
+				buffSend.len = lpIOContext->nTotalBytes - lpIOContext->nSentBytes; // calculate index into buffer and calc length of remaining data
 				nRet = WSASend(lpPerSocketContext->Socket, &buffSend, 1,
 							   &dwSendNumBytes, dwFlags, &(lpIOContext->Overlapped), NULL);
 				if (nRet == SOCKET_ERROR && (ERROR_IO_PENDING != WSAGetLastError()))
@@ -590,7 +590,7 @@ pSocketContext CtxtAllocate(SOCKET sd, ClientOperation ClientIO)
 			lpPerSocketContext->pIOContext->wsabuf.buf = lpPerSocketContext->pIOContext->Buffer;
 			lpPerSocketContext->pIOContext->wsabuf.len = sizeof(lpPerSocketContext->pIOContext->Buffer);
 
-			ZeroMemory(lpPerSocketContext->pIOContext->wsabuf.buf, lpPerSocketContext->pIOContext->wsabuf.len);
+			SecureZeroMemory(lpPerSocketContext->pIOContext->wsabuf.buf, lpPerSocketContext->pIOContext->wsabuf.len);
 		}
 		else
 		{
@@ -858,6 +858,7 @@ IocpServer::IocpServer()
 	}
 }
 
+
 bool IocpServer::EnterCritical(char *const lpStr)
 {
 	try //Try to enter the critical section
@@ -942,11 +943,11 @@ bool IocpServer::Run()
 		// post initial receive on this socket
 		//
 		nRet = WSARecv(m_sdTcpAccept,
-					   &(lpPerSocketContext->pIOContext->wsabuf),
+					   &(lpPerSocketContext->wsabuf),
 					   1,
 					   &dwRecvNumBytes,
 					   &dwFlags,
-					   &(lpPerSocketContext->pIOContext->Overlapped),
+					   &(lpPerSocketContext->Overlapped),
 					   NULL);
 		if (nRet == SOCKET_ERROR && (ERROR_IO_PENDING != WSAGetLastError()))
 		{
@@ -1004,13 +1005,15 @@ void IocpServer::Shutdown()
 	}
 }
 
+
 IocpServer::ClientContext* IocpServer::NewContext(SOCKET sd, ClientOperation ClientIO)
 {
-	EnterCritical();
+	/* EnterCritical();
 	ClientContext* clientContext = new IocpServer::ClientContext(sd, ClientIO, true);
 	LeaveCritical();
-	return clientContext;
+	return clientContext; */
 }
+
 
 bool IocpServer::FreeContext(ClientContext* context)
 {
@@ -1019,14 +1022,16 @@ bool IocpServer::FreeContext(ClientContext* context)
 	LeaveCritical();
 }
 
+
 IocpServer::ClientContext::ClientContext(SOCKET sd, ClientOperation ClientIO, bool graceful) : Socket{sd}, m_bGraceful{graceful}
 {
-	pIOContext = new IoContext;
-	pIOContext->IOOperation = ClientIO;
-	pIOContext->wsabuf.buf = pIOContext->Buffer;
-	pIOContext->wsabuf.len = sizeof(pIOContext->Buffer);
-	ZeroMemory(pIOContext->wsabuf.buf, pIOContext->wsabuf.len); // might not be needed
+	
+	IOOperation = ClientIO;
+	wsabuf.buf = Buffer;
+	wsabuf.len = sizeof(Buffer);
+	SecureZeroMemory(wsabuf.buf, wsabuf.len); 
 }
+
 
 IocpServer::ClientContext::~ClientContext()
 {
@@ -1048,9 +1053,9 @@ IocpServer::ClientContext::~ClientContext()
 	}
 	closesocket(Socket); // why wrong
 	Socket = INVALID_SOCKET;
-	if (pIOContext)
-		delete pIOContext;
+	
 	//CtxtListDeleteFrom(lpPerSocketContext);
 
 	printer::queuePrintf(printer::color::RED, "CloseClient: lpPerSocketContext is NULL\n");
 }
+
