@@ -788,17 +788,18 @@ IocpServer::IocpServer()
 {
 	int nRet;
 	DWORD dwThreadCount;
+	WSADATA wsaData;
+	SYSTEM_INFO systemInfo;
 
 	printer::queuePrintf(printer::color::BLUE, "[STARTUP] Initilizing server...\n");
 
-	if (!InitializeCriticalSectionAndSpinCount(&m_criticalSection, 1024))
-	{ //Initilize the critical section
+	if (!InitializeCriticalSectionAndSpinCount(&m_criticalSection, 1024)) //Initilize the critical section
+	{ 
 		printer::queuePrintf(printer::color::RED, "[STARTUP] InitializeCriticalSectionAndSpinCount() failed: %d\n", GetLastError());
 		Shutdown();
 		return;
 	}
-
-	WSADATA wsaData;
+	
 	nRet = WSAStartup(MAKEWORD(2, 2), &wsaData); //Startup WSA V2.2
 	if (nRet != 0)
 	{
@@ -807,7 +808,6 @@ IocpServer::IocpServer()
 		return;
 	}
 
-	SYSTEM_INFO systemInfo;
 	GetSystemInfo(&systemInfo);
 	dwThreadCount = systemInfo.dwNumberOfProcessors * 2; //Make number of total threads twice number of logical cores
 
@@ -832,7 +832,9 @@ IocpServer::IocpServer()
 		}
 	}
 
-	m_sdTcpAccept = WSASocketW(AF_INET6, SOCK_STREAM, IPPROTO_TCP, NULL, 0, WSA_FLAG_OVERLAPPED); //MIGHT NEED A SECOND LISTEN SOCKET TO ACCEPT UDP CONNECTIONS TOO
+	//Create TCP listen socket
+	m_sdTcpAccept = WSASocketW(AF_INET6, SOCK_STREAM, IPPROTO_TCP, NULL, 0, WSA_FLAG_OVERLAPPED);
+	//MIGHT NEED A SECOND LISTEN SOCKET TO ACCEPT UDP CONNECTIONS TOO
 	if (m_sdTcpAccept == INVALID_SOCKET)
 	{
 		printer::queuePrintf(printer::color::RED, "[STARTUP] WSASocketW() failed: %d\n", WSAGetLastError());
@@ -841,7 +843,7 @@ IocpServer::IocpServer()
 	}
 
 	const char flagVal = 1;
-	nRet = setsockopt(m_sdTcpAccept, SOL_SOCKET, SO_REUSEADDR, &flagVal, sizeof(flagVal));
+	nRet = setsockopt(m_sdTcpAccept, SOL_SOCKET, SO_REUSEADDR, &flagVal, sizeof(flagVal)); //Allow reuse of the local address
 	if (nRet == -1)
 	{
 		printer::queuePrintf(printer::color::RED, "[STARTUP] setsockopt() failed: %d\n", WSAGetLastError());
@@ -855,7 +857,7 @@ IocpServer::IocpServer()
 	addr.s6.sin6_addr = in6addr_any;
 	addr.s6.sin6_port = htons(atoi(port));
 
-	nRet = bind(m_sdTcpAccept, &addr.sa, sizeof(addr)); //bind new socket
+	nRet = bind(m_sdTcpAccept, &addr.sa, sizeof(addr)); //Bind listen socket
 	if (nRet == SOCKET_ERROR)
 	{
 		printer::queuePrintf(printer::color::RED, "[STARTUP] bind() failed: %d\n", WSAGetLastError());
@@ -863,7 +865,7 @@ IocpServer::IocpServer()
 		return;
 	}
 
-	nRet = listen(m_sdTcpAccept, SOMAXCONN); //set new socket to the listening state
+	nRet = listen(m_sdTcpAccept, SOMAXCONN); //Set listen socket to the listening state
 	if (nRet == SOCKET_ERROR)
 	{
 		printer::queuePrintf(printer::color::RED, "[STARTUP] listen() failed: %d\n", WSAGetLastError());
@@ -872,7 +874,7 @@ IocpServer::IocpServer()
 	}
 
 	printer::queuePrintf(printer::color::GREEN, "[STARTUP] Initilization successful");
-	m_serverReady = true;
+	m_serverReady = true; //Set the ready state to true
 }
 
 
