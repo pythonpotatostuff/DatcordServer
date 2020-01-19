@@ -7,9 +7,9 @@ typedef unsigned long long ull;
 int main(int argc, char* argv[])
 {
 	printer::startPrinter();
-	StartServer();
+	IocpServer iocp;
+	iocp.Run();
 	printer::stopPrinter();
 	return 0;
-	// ajshdkjashdk
 }
 

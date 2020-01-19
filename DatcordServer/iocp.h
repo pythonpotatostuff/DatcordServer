@@ -1,6 +1,7 @@
 #pragma once
 
 #include <WinSock2.h>
+#include <WS2tcpip.h>
 #include "common.h"
 #include "printer.h"
 #include <list>
@@ -12,7 +13,7 @@ typedef enum class ClientOperation
 	ClientAccept,
 	ClientRead,
 	ClientWrite
-} * pClientOperation;
+} *pClientOperation;
 
 typedef struct IoContext
 {
@@ -23,16 +24,16 @@ typedef struct IoContext
 	int nSentBytes;
 	ClientOperation IOOperation;
 	SOCKET SocketAccept;
-	IoContext *pIOContextForward;
-} * pIoContext;
+	IoContext* pIOContextForward;
+} *pIoContext;
 
 typedef struct SocketContext
 {
 	SOCKET Socket;
-	IoContext *pIOContext;
-	SocketContext *pCtxtBack;
-	SocketContext *pCtxtForward;
-} * pSocketContext;
+	IoContext* pIOContext;
+	SocketContext* pCtxtBack;
+	SocketContext* pCtxtForward;
+} *pSocketContext;
 
 bool StartServer();
 
@@ -64,9 +65,7 @@ class IocpServer
 public:
 	class ClientContext
 	{
-		//SocketContext clientSocketCtx;
 	public:
-		
 		// IO context (first data member must be WSAOVERLAPPED)
 		WSAOVERLAPPED Overlapped;
 		char Buffer[buff_size];
@@ -75,13 +74,8 @@ public:
 		int nSentBytes;
 		ClientOperation IOOperation;
 		SOCKET SocketAccept;
-		
-		IoContext *pIOContextForward;
-		/* SocketContext *pCtxtBack; // probably not using these
-		SocketContext *pCtxtForward;  */
-		
+		IoContext* pIOContextForward;
 		SOCKET Socket;
-
 		bool m_bGraceful;
 		
 	public:
@@ -92,29 +86,29 @@ public:
 private:
 	HANDLE m_hIOCP;
 	SOCKET m_sdTcpAccept;
-	//LinkedList<pSocketContext> m_contextList; //this might be TEMP
-	//pSocketContext m_pCtxtList; //this might be TEMP
-	std::vector<HANDLE> m_threadHandles;
-	CRITICAL_SECTION m_criticalSection; //Make segments of code thread safe
+	CRITICAL_SECTION m_criticalSection;
+	std::vector<std::thread> m_threads;
 	bool m_serverReady;
+	std::atomic<bool> m_bStopServer;
+
+	union sockaddr_data {
+		struct sockaddr_in6     s6;
+		struct sockaddr			sa;
+		struct sockaddr_storage ss;
+	};
 
 
 public:
 	IocpServer();
 	void Shutdown();
 
-	bool EnterCritical(char *const lpStr = "");
-	bool LeaveCritical(char *const lpStr = "");
+	bool EnterCritical(std::string err = "");
+	bool LeaveCritical(std::string err = "");
 
-	void ContextAdd(pSocketContext lpPerSocketContext); // most likely dont need either of these
-	void ContextDelete();
-
-	ClientContext *NewContext(SOCKET sd, ClientOperation ClientIO); // wrapper for thread safety
-	bool FreeContext(ClientContext *context);
-
-	ClientContext *UpdateCompletionPort(SOCKET sd, ClientOperation ClientIo /*, BOOL bAddToList*/);
+	ClientContext* NewContext(SOCKET sd, ClientOperation ClientIO);
+	void FreeContext(ClientContext* context);
+	ClientContext* UpdateCompletionPort(SOCKET sd, ClientOperation ClientIo);
 
 	bool Run();
-
-	static void Worker(IocpServer *self);
+	static void Worker(IocpServer* self);	
 };

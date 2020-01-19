@@ -1,6 +1,6 @@
 #include <Windows.h>
 #include "printer.h"
-
+#include <algorithm>
 
 std::thread printer::tPrinter;
 std::atomic<bool> printer::bStopPrinter;
@@ -44,7 +44,7 @@ size_t printer::queuePrintf(color c, const char* lpFormat, ...)
 bool printer::stopPrinter()
 {
 	bStopPrinter = true;
-	while (WaitForSingleObject(tPrinter.native_handle(), 100) != WAIT_OBJECT_0) {}
+	tPrinter.join();
 	SetConsoleTextAttribute(hOut, 0x07);
 	return true;
 }
@@ -52,7 +52,7 @@ bool printer::stopPrinter()
 
 void printer::printLoop()
 {
-	while (!bStopPrinter) {
+	while (!bStopPrinter || !qPrint.empty()) {
 		if (!qPrint.empty()) {
 			SetConsoleTextAttribute(hOut, static_cast<WORD>(qPrint.front().color));
 			printf("%s", qPrint.front().text.c_str());
