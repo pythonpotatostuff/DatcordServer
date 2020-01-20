@@ -66,7 +66,7 @@ public:
 	class ClientContext
 	{
 	public:
-		// IO context (first data member must be WSAOVERLAPPED)
+		//IO context (first data member must be WSAOVERLAPPED)
 		WSAOVERLAPPED Overlapped;
 		char Buffer[buff_size];
 		WSABUF wsabuf;
@@ -77,7 +77,7 @@ public:
 		IoContext* pIOContextForward;
 		SOCKET Socket;
 		bool m_bGraceful;
-		
+
 	public:
 		ClientContext(SOCKET sd, ClientOperation ClientIO, bool graceful);
 		~ClientContext();
@@ -88,7 +88,7 @@ private:
 	SOCKET m_sdTcpAccept;
 	CRITICAL_SECTION m_criticalSection;
 	std::vector<std::thread> m_threads;
-	bool m_serverReady;
+	bool m_bServerReady;
 	std::atomic<bool> m_bStopServer;
 
 	union sockaddr_data {
@@ -97,18 +97,18 @@ private:
 		struct sockaddr_storage ss;
 	};
 
+private:
+	ClientContext* UpdateCompletionPort(SOCKET sd, ClientOperation ClientIo);
+
+	bool EnterCritical(std::string err = "");
+	bool LeaveCritical(std::string err = "");
+
+	static void Worker(IocpServer* self);
 
 public:
 	IocpServer();
 	void Shutdown();
 
-	bool EnterCritical(std::string err = "");
-	bool LeaveCritical(std::string err = "");
-
-	ClientContext* NewContext(SOCKET sd, ClientOperation ClientIO);
-	void FreeContext(ClientContext* context);
-	ClientContext* UpdateCompletionPort(SOCKET sd, ClientOperation ClientIo);
-
 	bool Run();
-	static void Worker(IocpServer* self);	
 };
+

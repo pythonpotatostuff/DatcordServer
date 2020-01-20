@@ -128,12 +128,12 @@ bool StartServer()
 				// post initial receive on this socket
 				//
 				nRet = WSARecv(sdAccept,
-							   &(lpPerSocketContext->pIOContext->wsabuf),
-							   1,
-							   &dwRecvNumBytes,
-							   &dwFlags,
-							   &(lpPerSocketContext->pIOContext->Overlapped),
-							   NULL);
+					&(lpPerSocketContext->pIOContext->wsabuf),
+					1,
+					&dwRecvNumBytes,
+					&dwFlags,
+					&(lpPerSocketContext->pIOContext->Overlapped),
+					NULL);
 				if (nRet == SOCKET_ERROR && (ERROR_IO_PENDING != WSAGetLastError()))
 				{
 					printer::queuePrintf(printer::color::RED, "WSARecv() failed: %d\n", WSAGetLastError());
@@ -142,7 +142,7 @@ bool StartServer()
 			} //while
 		}
 
-		catch (const std::exception &e)
+		catch (const std::exception & e)
 		{
 			printer::queuePrintf(printer::color::RED, "Caught exception: %s", e.what());
 		}
@@ -207,8 +207,8 @@ bool CreateListenSocket(void)
 {
 	int nRet = 0;
 	int nZero = 0;
-	struct addrinfo hints = {0};
-	struct addrinfo *addrlocal = NULL;
+	struct addrinfo hints = { 0 };
+	struct addrinfo* addrlocal = NULL;
 
 	//
 	// Resolve the interface
@@ -231,7 +231,7 @@ bool CreateListenSocket(void)
 	}
 
 	g_sdListen = WSASocketW(addrlocal->ai_family, addrlocal->ai_socktype, addrlocal->ai_protocol,
-							NULL, 0, WSA_FLAG_OVERLAPPED);
+		NULL, 0, WSA_FLAG_OVERLAPPED);
 	if (g_sdListen == INVALID_SOCKET)
 	{
 		printer::queuePrintf(printer::color::RED, "WSASocket(g_sdListen) failed: %d\n", WSAGetLastError());
@@ -266,7 +266,7 @@ bool CreateListenSocket(void)
 	// than disabling the receive buffer.
 	//
 	nZero = 0;
-	nRet = setsockopt(g_sdListen, SOL_SOCKET, SO_SNDBUF, (char *)&nZero, sizeof(nZero));
+	nRet = setsockopt(g_sdListen, SOL_SOCKET, SO_SNDBUF, (char*)&nZero, sizeof(nZero));
 	if (nRet == SOCKET_ERROR)
 	{
 		printer::queuePrintf(printer::color::RED, "setsockopt(SNDBUF) failed: %d\n", WSAGetLastError());
@@ -323,7 +323,7 @@ void CloseClient(pSocketContext lpPerSocketContext, BOOL bGraceful)
 	{
 		EnterCriticalSection(&g_CriticalSection);
 	}
-	catch (const std::exception &e)
+	catch (const std::exception & e)
 	{
 		printer::queuePrintf(printer::color::RED, "Caught exception: %s", e.what());
 		return;
@@ -333,7 +333,7 @@ void CloseClient(pSocketContext lpPerSocketContext, BOOL bGraceful)
 	{
 		if (g_bVerbose)
 			printer::queuePrintf(printer::color::RED, "CloseClient: Socket(%d) connection closing (graceful=%s)\n",
-								 lpPerSocketContext->Socket, (bGraceful ? "TRUE" : "FALSE"));
+				lpPerSocketContext->Socket, (bGraceful ? "TRUE" : "FALSE"));
 		if (!bGraceful)
 		{
 
@@ -345,7 +345,7 @@ void CloseClient(pSocketContext lpPerSocketContext, BOOL bGraceful)
 			lingerStruct.l_onoff = 1;
 			lingerStruct.l_linger = 0;
 			setsockopt(lpPerSocketContext->Socket, SOL_SOCKET, SO_LINGER,
-					   (char *)&lingerStruct, sizeof(lingerStruct)); // do not linger, closes even if there is unsent data present (loss of data)
+				(char*)&lingerStruct, sizeof(lingerStruct)); // do not linger, closes even if there is unsent data present (loss of data)
 		}
 		closesocket(lpPerSocketContext->Socket); // why wrong
 		lpPerSocketContext->Socket = INVALID_SOCKET;
@@ -388,9 +388,9 @@ DWORD WINAPI WorkerThread(LPVOID WorkThreadContext)
 		// continually loop to service io completion packets
 		//
 		bSuccess = GetQueuedCompletionStatus(hIOCP, &dwIoSize,
-											 (PDWORD_PTR)&lpPerSocketContext,
-											 (LPOVERLAPPED *)&lpOverlapped,
-											 INFINITE); // blocking
+			(PDWORD_PTR)&lpPerSocketContext,
+			(LPOVERLAPPED*)&lpOverlapped,
+			INFINITE); // blocking
 		if (!bSuccess)
 			printer::queuePrintf(printer::color::RED, "GetQueuedCompletionStatus() failed: %d\n", GetLastError());
 
@@ -442,7 +442,7 @@ DWORD WINAPI WorkerThread(LPVOID WorkThreadContext)
 			lpIOContext->wsabuf.len = dwIoSize;
 			dwFlags = 0;
 			nRet = WSASend(lpPerSocketContext->Socket, &lpIOContext->wsabuf, 1,
-						   &dwSendNumBytes, dwFlags, &(lpIOContext->Overlapped), NULL);
+				&dwSendNumBytes, dwFlags, &(lpIOContext->Overlapped), NULL);
 			if (nRet == SOCKET_ERROR && (ERROR_IO_PENDING != WSAGetLastError()))
 			{
 				printer::queuePrintf(printer::color::RED, "WSASend() failed: %d\n", WSAGetLastError());
@@ -451,7 +451,7 @@ DWORD WINAPI WorkerThread(LPVOID WorkThreadContext)
 			else if (g_bVerbose)
 			{
 				printer::queuePrintf(printer::color::RED, "WorkerThread %d: Socket(%d) Recv completed (%d bytes), Send posted\n",
-									 GetCurrentThreadId(), lpPerSocketContext->Socket, dwIoSize);
+					GetCurrentThreadId(), lpPerSocketContext->Socket, dwIoSize);
 			}
 			break;
 
@@ -473,7 +473,7 @@ DWORD WINAPI WorkerThread(LPVOID WorkThreadContext)
 				buffSend.buf = lpIOContext->Buffer + lpIOContext->nSentBytes;
 				buffSend.len = lpIOContext->nTotalBytes - lpIOContext->nSentBytes; // calculate index into buffer and calc length of remaining data
 				nRet = WSASend(lpPerSocketContext->Socket, &buffSend, 1,
-							   &dwSendNumBytes, dwFlags, &(lpIOContext->Overlapped), NULL);
+					&dwSendNumBytes, dwFlags, &(lpIOContext->Overlapped), NULL);
 				if (nRet == SOCKET_ERROR && (ERROR_IO_PENDING != WSAGetLastError()))
 				{
 					printer::queuePrintf(printer::color::RED, "WSASend() failed: %d\n", WSAGetLastError());
@@ -482,7 +482,7 @@ DWORD WINAPI WorkerThread(LPVOID WorkThreadContext)
 				else if (g_bVerbose)
 				{
 					printer::queuePrintf(printer::color::RED, "WorkerThread %d: Socket(%d) Send partially completed (%d bytes), Recv posted\n",
-										 GetCurrentThreadId(), lpPerSocketContext->Socket, dwIoSize);
+						GetCurrentThreadId(), lpPerSocketContext->Socket, dwIoSize);
 				}
 			}
 			else
@@ -494,9 +494,9 @@ DWORD WINAPI WorkerThread(LPVOID WorkThreadContext)
 				dwRecvNumBytes = 0;
 				dwFlags = 0;
 				buffRecv.buf = lpIOContext->Buffer,
-				buffRecv.len = buff_size;
+					buffRecv.len = buff_size;
 				nRet = WSARecv(lpPerSocketContext->Socket, &buffRecv, 1,
-							   &dwRecvNumBytes, &dwFlags, &lpIOContext->Overlapped, NULL);
+					&dwRecvNumBytes, &dwFlags, &lpIOContext->Overlapped, NULL);
 				if (nRet == SOCKET_ERROR && (ERROR_IO_PENDING != WSAGetLastError()))
 				{
 					printer::queuePrintf(printer::color::RED, "WSARecv() failed: %d\n", WSAGetLastError());
@@ -505,7 +505,7 @@ DWORD WINAPI WorkerThread(LPVOID WorkThreadContext)
 				else if (g_bVerbose)
 				{
 					printer::queuePrintf(printer::color::RED, "WorkerThread %d: Socket(%d) Send completed (%d bytes), Recv posted\n",
-										 GetCurrentThreadId(), lpPerSocketContext->Socket, dwIoSize);
+						GetCurrentThreadId(), lpPerSocketContext->Socket, dwIoSize);
 				}
 			}
 			break;
@@ -562,7 +562,7 @@ pSocketContext CtxtAllocate(SOCKET sd, ClientOperation ClientIO)
 	{
 		EnterCriticalSection(&g_CriticalSection);
 	}
-	catch (const std::exception &e)
+	catch (const std::exception & e)
 	{
 		printer::queuePrintf(printer::color::RED, "Caught exception: %s", e.what());
 		return NULL;
@@ -617,7 +617,7 @@ void CtxtListAddTo(pSocketContext lpPerSocketContext)
 	{
 		EnterCriticalSection(&g_CriticalSection);
 	}
-	catch (const std::exception &e)
+	catch (const std::exception & e)
 	{
 		printer::queuePrintf(printer::color::RED, "Caught exception: %s", e.what());
 		return;
@@ -666,7 +666,7 @@ void CtxtListDeleteFrom(pSocketContext lpPerSocketContext)
 	{
 		EnterCriticalSection(&g_CriticalSection);
 	}
-	catch (const std::exception &e)
+	catch (const std::exception & e)
 	{
 		printer::queuePrintf(printer::color::WHITE, "Caught exception: %s", e.what());
 		return;
@@ -759,7 +759,7 @@ void CtxtListFree()
 	{
 		EnterCriticalSection(&g_CriticalSection);
 	}
-	catch (const std::exception &e)
+	catch (const std::exception & e)
 	{
 		printer::queuePrintf(printer::color::WHITE, "Caught exception: %s", e.what());
 		return;
@@ -794,12 +794,12 @@ IocpServer::IocpServer()
 	printer::queuePrintf(printer::color::BLUE, "[STARTUP] Initilizing server...\n");
 
 	if (!InitializeCriticalSectionAndSpinCount(&m_criticalSection, 1024)) //Initilize the critical section
-	{ 
+	{
 		printer::queuePrintf(printer::color::RED, "[STARTUP] InitializeCriticalSectionAndSpinCount() failed: %d\n", GetLastError());
 		Shutdown();
 		return;
 	}
-	
+
 	nRet = WSAStartup(MAKEWORD(2, 2), &wsaData); //Startup WSA V2.2
 	if (nRet != 0)
 	{
@@ -819,7 +819,6 @@ IocpServer::IocpServer()
 		Shutdown();
 		return;
 	}
-
 
 	for (DWORD i = 0; i < dwThreadCount; i++) //Startup worker threads and pass the IOCP handle to them
 	{
@@ -850,7 +849,7 @@ IocpServer::IocpServer()
 		Shutdown();
 		return;
 	}
-	
+
 	sockaddr_data addr;
 	SecureZeroMemory(&addr, sizeof(addr));
 	addr.s6.sin6_family = AF_INET6;
@@ -874,19 +873,19 @@ IocpServer::IocpServer()
 	}
 
 	printer::queuePrintf(printer::color::GREEN, "[STARTUP] Initilization successful");
-	m_serverReady = true; //Set the ready state to true
+	m_bServerReady = true; //Set the ready state to true
 }
 
 
 void IocpServer::Shutdown()
 {
-	m_serverReady = false;
+	m_bServerReady = false;
 	if (shutdown(m_sdTcpAccept, SD_BOTH) == SOCKET_ERROR) //Shutdown tcp listening socket
-	{ 
+	{
 		printer::queuePrintf(printer::color::RED, "[SHUTDOWN] shutdown() failed: %d\n", WSAGetLastError());
 	}
 	if (closesocket(m_sdTcpAccept) == SOCKET_ERROR) //Close tcp listening socket
-	{ 
+	{
 		printer::queuePrintf(printer::color::RED, "[SHUTDOWN] closesocket() failed: %d\n", WSAGetLastError());
 	}
 
@@ -897,7 +896,7 @@ void IocpServer::Shutdown()
 	}
 
 	if (m_hIOCP) //Close the IOCP handle
-	{ 
+	{
 		if (CloseHandle(m_hIOCP) == 0)
 		{
 			printer::queuePrintf(printer::color::RED, "[SHUTDOWN] CloseHandle() failed: %d\n", GetLastError());
@@ -905,7 +904,7 @@ void IocpServer::Shutdown()
 	}
 
 	if (WSACleanup() == SOCKET_ERROR) //Cleanup WSA
-	{ 
+	{
 		printer::queuePrintf(printer::color::RED, "[SHUTDOWN] WSACleanup() failed: %d\n", WSAGetLastError());
 	}
 
@@ -926,10 +925,9 @@ bool IocpServer::EnterCritical(std::string err)
 	{
 		EnterCriticalSection(&m_criticalSection);
 	}
-	catch (const std::exception &e)
+	catch (const std::exception & e)
 	{
-		
-		err = "[ENTER CRIT] EnterCriticalSection() failed: " + err;
+		err.insert(0, " [ENTER CRIT] EnterCriticalSection() failed:");
 		printer::queuePrintf(printer::color::WHITE, err.c_str(), e.what());
 		return false;
 	}
@@ -943,30 +941,13 @@ bool IocpServer::LeaveCritical(std::string err)
 	{
 		LeaveCriticalSection(&m_criticalSection);
 	}
-	catch (const std::exception &e)
+	catch (const std::exception & e)
 	{
-		err = "[LEAVE CRIT] LeaveCriticalSection() failed: " + err;
+		err.insert(0, " [LEAVE CRIT] LeaveCriticalSection() failed: ");
 		printer::queuePrintf(printer::color::WHITE, err.c_str(), e.what());
 		return false;
 	}
 	return true;
-}
-
-
-IocpServer::ClientContext* IocpServer::NewContext(SOCKET sd, ClientOperation ClientIO)
-{
-	EnterCritical();
-	ClientContext* clientContext = new IocpServer::ClientContext(sd, ClientIO, true);
-	LeaveCritical();
-	return clientContext; 
-}
-
-
-void IocpServer::FreeContext(ClientContext* context)
-{
-	EnterCritical();
-	if(context) delete context;
-	LeaveCritical();
 }
 
 
@@ -976,68 +957,64 @@ bool IocpServer::Run()
 	DWORD dwFlags = 0;
 	int nRet = 0;
 
-	if (!m_serverReady)	return false;
+	sockaddr_data clientInfo;
+	int addrLen = sizeof(sockaddr_data);
+
+	if (!m_bServerReady) return false;
 
 	//accept incoming connetions and post initial read for them
 	while (true)
 	{
 		// NOT SURE ABOUT THIS - pSocketContext lpPerSocketContext;
-
-		sockaddr_data clientInfo;
-		int addrLen = sizeof(sockaddr_data);
 		SecureZeroMemory(&clientInfo, sizeof(clientInfo));
 		SOCKET m_sdTcpClient = WSAAccept(m_sdTcpAccept, &clientInfo.sa, &addrLen, NULL, 0);
-		
-		char ip[INET6_ADDRSTRLEN]{};
-		if (inet_ntop(AF_INET6, (void*)&clientInfo.s6.sin6_addr, ip, INET6_ADDRSTRLEN) == NULL)
-		{
-			printer::queuePrintf(printer::color::GREEN, "[RUN] inet_ntop() failed\n");
-		}
-		else 
-		{
-			printer::queuePrintf(printer::color::GREEN, "[RUN] WSAAccept() got a connection %s\n", ip);
-		}
 
 		if (m_sdTcpClient == SOCKET_ERROR)
 		{
 			printer::queuePrintf(printer::color::RED, "[RUN] WSAAccept() failed: %d\n", WSAGetLastError());
+			continue;
 		}
 
-		//
+		char ip[INET6_ADDRSTRLEN]{};
+		if (inet_ntop(AF_INET6, (void*)&clientInfo.s6.sin6_addr, ip, INET6_ADDRSTRLEN) == NULL)
+		{
+			printer::queuePrintf(printer::color::RED, "[RUN] inet_ntop() failed\n");
+		}
+		else
+		{
+			printer::queuePrintf(printer::color::GREEN, "[RUN] WSAAccept() got a connection %s\n", ip);
+		}
+
 		// we add the just returned socket descriptor to the IOCP along with its
 		// associated key data.  Also the global list of context structures
 		// (the key data) gets added to a global list.
-		//
-		ClientContext *clientContext = UpdateCompletionPort(m_sdTcpClient, ClientOperation::ClientRead);
+		ClientContext* clientContext = UpdateCompletionPort(m_sdTcpClient, ClientOperation::ClientRead);
 		if (clientContext == NULL)
 		{
 			printer::queuePrintf(printer::color::RED, "[RUN] UpdateCompletionPort() failed: %d\n", GetLastError());
-			return false;
+			delete clientContext;
+			continue;
 		}
 
-
-		//
-		// post initial receive on this socket
-		//
+		//Post initial receive on this socket
 		nRet = WSARecv(m_sdTcpClient,
-					   &(clientContext->wsabuf),
-					   1,
-					   &dwRecvNumBytes,
-					   &dwFlags,
-					   &(clientContext->Overlapped),
-					   NULL);
+			&(clientContext->wsabuf),
+			1,
+			&dwRecvNumBytes,
+			&dwFlags,
+			&(clientContext->Overlapped),
+			NULL);
 		if (nRet == SOCKET_ERROR && (ERROR_IO_PENDING != WSAGetLastError()))
 		{
 			printer::queuePrintf(printer::color::RED, "[RUN] WSARecv() failed: %d\n", WSAGetLastError());
-			//CloseClient(lpPerSocketContext, false);
-			delete clientContext; // calls destructor and gracefully shutsdown socket
+			delete clientContext;
 		}
 	} //while
 	return true;
 }
 
 
-void IocpServer::Worker(IocpServer *self)
+void IocpServer::Worker(IocpServer* self)
 {
 	while (!self->m_bStopServer)
 	{
@@ -1048,18 +1025,14 @@ void IocpServer::Worker(IocpServer *self)
 
 IocpServer::ClientContext* IocpServer::UpdateCompletionPort(SOCKET sd, ClientOperation ClientIo)
 {
-	IocpServer::ClientContext* clientContext;
-
-	clientContext = NewContext(sd, ClientIo);
-	if (clientContext == NULL)
-		return NULL;
+	IocpServer::ClientContext* clientContext = new IocpServer::ClientContext(sd, ClientIo, true);
+	if (clientContext == NULL) return NULL;
 
 	g_hIOCP = CreateIoCompletionPort((HANDLE)sd, m_hIOCP, (DWORD_PTR)clientContext, 0); // first member of this struct is required to be WSAOVERLAPPED 
 	if (g_hIOCP == NULL)
 	{
 		printer::queuePrintf(printer::color::RED, "CreateIoCompletionPort() failed: %d\n", GetLastError());
-		if (clientContext)
-			delete clientContext;
+		if (clientContext) delete clientContext;
 		return NULL;
 	}
 
@@ -1089,13 +1062,12 @@ IocpServer::ClientContext::ClientContext(SOCKET sd, ClientOperation ClientIO, bo
 	/*IOOperation = ClientIO;
 	wsabuf.buf = Buffer;
 	wsabuf.len = sizeof(Buffer);*/
-	SecureZeroMemory(wsabuf.buf, wsabuf.len); 
+	SecureZeroMemory(wsabuf.buf, wsabuf.len);
 }
 
 
 IocpServer::ClientContext::~ClientContext()
 {
-
 	printer::queuePrintf(printer::color::RED, "CloseClient: Socket(%d) connection closing (graceful=%s)\n", Socket, m_bGraceful ? "TRUE" : "FALSE");
 	if (!m_bGraceful)
 	{
@@ -1108,11 +1080,11 @@ IocpServer::ClientContext::~ClientContext()
 		lingerStruct.l_onoff = 1;
 		lingerStruct.l_linger = 0;
 		setsockopt(Socket, SOL_SOCKET, SO_LINGER,
-				   (char *)&lingerStruct, sizeof(lingerStruct)); // do not linger, closes even if there is unsent data present (loss of data)
+			(char*)&lingerStruct, sizeof(lingerStruct)); // do not linger, closes even if there is unsent data present (loss of data)
 	}
 	closesocket(Socket); // why wrong
 	Socket = INVALID_SOCKET;
-	
+
 	//CtxtListDeleteFrom(lpPerSocketContext);
 
 	printer::queuePrintf(printer::color::RED, "CloseClient: lpPerSocketContext is NULL\n");
