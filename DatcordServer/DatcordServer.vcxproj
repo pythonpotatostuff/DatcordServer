@@ -123,6 +123,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="ClientContext.cpp" />
     <ClCompile Include="common.cpp" />
     <ClCompile Include="iocp.cpp" />
     <ClCompile Include="Log.cpp" />

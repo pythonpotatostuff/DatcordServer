@@ -32,7 +32,7 @@ bool printer::startPrinter()
 size_t printer::queuePrintf(color c, const char* lpFormat, ...)
 {
 	va_start(arglist, lpFormat);
-	char cBuffer[1024];
+	char cBuffer[1024]{};
 	vsnprintf(cBuffer, 1024, lpFormat, arglist);
 	std::string strBuff(cBuffer);
 	strBuff.insert(0, GetTimestamp() + ": ");
