@@ -254,6 +254,7 @@ void IocpServer::Worker(IocpServer* self)
 {
 	DWORD tId = GetCurrentThreadId();
 	ClientContext* key = nullptr;
+	WSABUF* buffPtr;
 	OVERLAPPED* overlapped = NULL;
 	DWORD numBytes = 0;
 	bool complete = false;

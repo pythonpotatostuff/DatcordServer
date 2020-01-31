@@ -6,7 +6,7 @@
 class Log
 {
 private:
-	union QWORD { uint64_t qword; DWORD high; DWORD low; };
+	union QWORD { uint64_t qword; struct { DWORD high; DWORD low; }; };
 	CRITICAL_SECTION cSection;
 	HANDLE hFile;
 	HANDLE hMap;
@@ -22,12 +22,11 @@ private:
 	uint64_t maxIndex;
 
 	void GetTimestamp();
-	
+	uint64_t fileExtend();
 
 public:
 	Log(const char* lpFname);
 	uint64_t log(const char* lpStr);
-	uint64_t fileExtend();
 	~Log();
 };
 

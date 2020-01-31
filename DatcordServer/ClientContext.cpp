@@ -9,13 +9,8 @@ IocpServer::ClientContext::ClientContext(SOCKET sd, ClientOperation ClientIO, bo
 	wsabuf{ buff_size, Buffer },
 	nTotalBytes{ 0 },
 	nSentBytes{ 0 },
-	SocketAccept{},
 	Overlapped{}
-
 {
-	/*IOOperation = ClientIO;
-	wsabuf.buf = Buffer;
-	wsabuf.len = sizeof(Buffer);*/
 	SecureZeroMemory(wsabuf.buf, wsabuf.len);
 }
 
