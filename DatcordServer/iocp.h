@@ -6,7 +6,7 @@
 #include "printer.h"
 #include <vector>
 constexpr auto port = "6969";
-constexpr int buff_size = 512;
+constexpr int buff_size = 4096;
 
 
 class IocpServer
@@ -30,6 +30,7 @@ private:
 		int nTotalBytes;
 		WSABUF remainingData;
 		int nSentBytes;
+		int recepients;
 		ClientOperation IOOperation;
 		SOCKET Socket;
 		bool m_bGraceful;
@@ -50,7 +51,7 @@ private:
 	bool m_bServerReady;
 	std::atomic<bool> m_bStopServer;
 
-	std::vector<SOCKET> allClients; //TEMP
+	std::vector<SOCKET> allClients; //TODO
 
 private:
 	bool UpdateCompletionPort(ClientContext* clientContext);

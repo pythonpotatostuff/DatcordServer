@@ -86,6 +86,15 @@ IocpServer::IocpServer()
 		return;
 	}
 
+	const DWORD flagVal2 = 0;
+	bRet = setsockopt(m_sdTcpAccept, IPPROTO_IPV6, IPV6_V6ONLY, (const char*)&flagVal2, sizeof(flagVal2));
+	if (bRet == -1)
+	{
+		printer::queuePrintf(printer::color::RED, "[STARTUP] setsockopt() failed: %d\n", WSAGetLastError());
+		Shutdown();
+		return;
+	}
+
 	sockaddr_data addr;
 	SecureZeroMemory(&addr, sizeof(addr));
 	addr.s6.sin6_family = AF_INET6;
@@ -155,7 +164,7 @@ void IocpServer::Shutdown()
 }
 
 
-bool IocpServer::EnterCritical(std::string err)
+bool IocpServer::EnterCritical(std::string errTag)
 {
 	try //Try to enter the critical section
 	{
@@ -163,15 +172,15 @@ bool IocpServer::EnterCritical(std::string err)
 	}
 	catch (const std::exception & e)
 	{
-		err.insert(0, " [ENTER CRIT] EnterCriticalSection() failed:");
-		printer::queuePrintf(printer::color::WHITE, err.c_str(), e.what());
+		errTag.append(" [ENTER CRIT] EnterCriticalSection() failed: %s\n");
+		printer::queuePrintf(printer::color::WHITE, errTag.c_str(), e.what());
 		return false;
 	}
 	return true;
 }
 
 
-bool IocpServer::LeaveCritical(std::string err)
+bool IocpServer::LeaveCritical(std::string errTag)
 {
 	try //Try to leave the critical section
 	{
@@ -179,8 +188,8 @@ bool IocpServer::LeaveCritical(std::string err)
 	}
 	catch (const std::exception & e)
 	{
-		err.insert(0, " [LEAVE CRIT] LeaveCriticalSection() failed: ");
-		printer::queuePrintf(printer::color::WHITE, err.c_str(), e.what());
+		errTag.append(" [LEAVE CRIT] LeaveCriticalSection() failed: %s\n");
+		printer::queuePrintf(printer::color::WHITE, errTag.c_str(), e.what());
 		return false;
 	}
 	return true;
@@ -211,7 +220,7 @@ bool IocpServer::Run()
 			continue;
 		}
 
-		allClients.push_back(m_sdTcpClient); //TEMP
+		allClients.push_back(m_sdTcpClient); //TODO this just temp for testing if this entire server even works
 
 		SecureZeroMemory(ip, INET6_ADDRSTRLEN);
 		if (inet_ntop(AF_INET6, &clientInfo.s6.sin6_addr, ip, INET6_ADDRSTRLEN) != NULL)
@@ -311,10 +320,13 @@ bool IocpServer::ClientRead(ClientContext* key, int tId)
 	//Because a recv just completed, start a write of the data
 	printer::queuePrintf(printer::color::GREEN, "[WORKER] [THREAD %d] [READ] Recieved %d bytes. Posted a write operation", tId, key->nTotalBytes);
 	key->IOOperation = ClientOperation::ClientWrite;
-	if (WSASend(key->Socket, &key->wsabuf, 1, NULL, 0, &(key->Overlapped), NULL) == SOCKET_ERROR)
+	for (SOCKET recipient : allClients) //TODO this is mega scuffed and will post a ton of extra reads
 	{
-		printer::queuePrintf(printer::color::GREEN, "[WORKER] [THREAD %d] [READ] WSASend() failed: %", tId, WSAGetLastError());
-		return false;
+		if (WSASend(recipient, &key->wsabuf, 1, NULL, 0, &(key->Overlapped), NULL) == SOCKET_ERROR) //TODO right now this is just echoing to the sender
+		{
+			printer::queuePrintf(printer::color::GREEN, "[WORKER] [THREAD %d] [READ] WSASend() failed: %", tId, WSAGetLastError());
+			return false;
+		}
 	}
 	return true;
 }
@@ -324,14 +336,33 @@ bool IocpServer::ClientWrite(ClientContext* key, int tId)
 {
 	//Because a write just completed, if the write did not write all the data do another write, otherwise post a read
 	if (key->nSentBytes < key->nTotalBytes)
-	{ //NONE OF THIS SHIT WORKS BY THE WAY SO SURE AS HELL DONT USE IT. THIS IS GONNA TAKE YEARS TO FIGURE OUT
-		key->remainingData.buf = key->wsabuf.buf + key->nSentBytes;
-		key->remainingData.len = key->wsabuf.len - key->nSentBytes;
-		if (WSASend(key->Socket, &key->wsabuf, 1, NULL, 0, &(key->Overlapped), NULL) == SOCKET_ERROR)
-		{
-
-		}
+	{ //TODO this partial send scenario is incomplete but this can only happen if the transport buffer of the system is full which is unlikely to ever happen
+		//key->remainingData.buf = key->wsabuf.buf + key->nSentBytes;
+		//key->remainingData.len = key->wsabuf.len - key->nSentBytes;
+		//if (WSASend(key->Socket, &key->wsabuf, 1, NULL, 0, &(key->Overlapped), NULL) == SOCKET_ERROR) //TODO right now this is just echoing to the sender
+		//{
+			printer::queuePrintf(printer::color::RED, "[WORKER] [THREAD %d] [WRITE] Partial data was sent but we are not doing anything about it right now");
+		//}
 	}
+	//else //this always will happen since we dont handle partial reads
+	//{
+		DWORD dwRecvNumBytes = 0; //TODO this might be unnecessary and NULL can be used instead
+		DWORD dwFlags = 0; //TODO this might also be able to be NULL
+		key->IOOperation = ClientOperation::ClientRead;
+		if (WSARecv(key->Socket,
+			&(key->wsabuf),
+			1,
+			&dwRecvNumBytes,
+			&dwFlags,
+			&(key->Overlapped),
+			NULL)
+			== SOCKET_ERROR)
+		{
+			printer::queuePrintf(printer::color::GREEN, "[WORKER] [THREAD %d] [READ] WSARecv() failed: %", tId, WSAGetLastError());
+			return false;
+		}
+		return true;
+	//}
 	return true;
 }
 

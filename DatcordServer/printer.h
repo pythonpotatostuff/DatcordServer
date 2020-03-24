@@ -15,6 +15,7 @@ namespace printer
 	extern HANDLE hOut;
 	extern std::queue<PrintData> qPrint;
 	extern va_list arglist;
+	extern CRITICAL_SECTION critSection;
 	constexpr DWORD timeSize = 1024;
 	bool startPrinter();
 	size_t queuePrintf(color, const char* lpFormat, ...);
